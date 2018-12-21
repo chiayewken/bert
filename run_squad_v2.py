@@ -227,7 +227,7 @@ class InputFeatures(object):
         self.is_impossible = is_impossible
 
 
-def read_squad_examples(input_file, is_training):
+def read_squad_examples(input_file, is_training, version_2_with_negative):
     """Read a SQuAD json file into a list of SquadExample."""
     with tf.gfile.Open(input_file, "r") as reader:
         input_data = json.load(reader)["data"]
@@ -264,7 +264,7 @@ def read_squad_examples(input_file, is_training):
                 is_impossible = False
                 if is_training:
 
-                    if FLAGS.version_2_with_negative:
+                    if version_2_with_negative:
                         is_impossible = qa["is_impossible"]
                     if (len(qa["answers"]) != 1) and (not is_impossible):
                         raise ValueError(
