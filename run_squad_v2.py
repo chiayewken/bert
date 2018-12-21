@@ -201,8 +201,9 @@ def convert_examples_to_features(
     """Loads a data file into a list of `InputBatch`s."""
 
     unique_id = 1000000000
+    example_index = 0
 
-    for (example_index, example) in enumerate(examples):
+    for example in examples:
         query_tokens = tokenizer.tokenize(example.question_text)
 
         if len(query_tokens) > max_query_length:
@@ -386,6 +387,7 @@ def convert_examples_to_features(
             output_fn(feature)
 
             unique_id += 1
+            example_index += 1
 
 
 def _improve_answer_span(
