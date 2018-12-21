@@ -1187,7 +1187,7 @@ def main(_):
     num_warmup_steps = None
     if FLAGS.do_train:
         train_examples = read_squad_examples(
-            input_file=FLAGS.train_file, is_training=True)
+            input_file=FLAGS.train_file, is_training=True, version_2_with_negative=FLAGS.version_2_with_negative)
         num_train_steps = int(
             len(train_examples) / FLAGS.train_batch_size *
             FLAGS.num_train_epochs)
@@ -1248,7 +1248,7 @@ def main(_):
 
     if FLAGS.do_predict:
         eval_examples = read_squad_examples(
-            input_file=FLAGS.predict_file, is_training=False)
+            input_file=FLAGS.predict_file, is_training=False, version_2_with_negative=FLAGS.version_2_with_negative)
 
         eval_writer = FeatureWriter(
             filename=os.path.join(FLAGS.output_dir, "eval.tf_record"),
