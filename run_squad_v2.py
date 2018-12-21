@@ -942,7 +942,8 @@ def write_predictions(
     output_prediction_file,
     output_nbest_file,
     output_null_log_odds_file,
-    version_2_with_negative
+    version_2_with_negative,
+    null_score_diff_threshold=0.0
 ):
     """Write final predictions to the json file and log-odds of null if needed."""
     tf.logging.info("Writing predictions to: %s" % (output_prediction_file))
@@ -1121,7 +1122,7 @@ def write_predictions(
                 - (best_non_null_entry.end_logit)
             )
             scores_diff_json[example.qas_id] = score_diff
-            if score_diff > FLAGS.null_score_diff_threshold:
+            if score_diff > null_score_diff_threshold:
                 all_predictions[example.qas_id] = ""
             else:
                 all_predictions[example.qas_id] = best_non_null_entry.text
@@ -1139,7 +1140,7 @@ def write_predictions(
             writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
 
 
-def get_final_text(pred_text, orig_text, do_lower_case):
+def get_final_text(pred_text, orig_text, do_lower_case, verbose_logging=True):
     """Project the tokenized prediction back to the original text."""
 
     # When we created the data, we kept track of the alignment between original
@@ -1188,7 +1189,7 @@ def get_final_text(pred_text, orig_text, do_lower_case):
 
     start_position = tok_text.find(pred_text)
     if start_position == -1:
-        if FLAGS.verbose_logging:
+        if verbose_logging:
             tf.logging.info(
                 "Unable to find text: '%s' in '%s'" % (pred_text, orig_text)
             )
@@ -1199,7 +1200,7 @@ def get_final_text(pred_text, orig_text, do_lower_case):
     (tok_ns_text, tok_ns_to_s_map) = _strip_spaces(tok_text)
 
     if len(orig_ns_text) != len(tok_ns_text):
-        if FLAGS.verbose_logging:
+        if verbose_logging:
             tf.logging.info(
                 "Length not equal after stripping spaces: '%s' vs '%s'",
                 orig_ns_text,
@@ -1220,7 +1221,7 @@ def get_final_text(pred_text, orig_text, do_lower_case):
             orig_start_position = orig_ns_to_s_map[ns_start_position]
 
     if orig_start_position is None:
-        if FLAGS.verbose_logging:
+        if verbose_logging:
             tf.logging.info("Couldn't map start position")
         return orig_text
 
@@ -1231,7 +1232,7 @@ def get_final_text(pred_text, orig_text, do_lower_case):
             orig_end_position = orig_ns_to_s_map[ns_end_position]
 
     if orig_end_position is None:
-        if FLAGS.verbose_logging:
+        if verbose_logging:
             tf.logging.info("Couldn't map end position")
         return orig_text
 
