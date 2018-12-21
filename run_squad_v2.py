@@ -103,8 +103,8 @@ class InputFeatures(object):
         self.is_impossible = is_impossible
 
 
-def read_squad_examples_generator(input_file, is_training, version_2_with_negative):
-    """Read a SQuAD json file into a list of SquadExample."""
+def read_squad_examples(input_file, is_training, version_2_with_negative):
+    """Read a SQuAD json file into a generator of SquadExample."""
     with tf.gfile.Open(input_file, "r") as reader:
         input_data = json.load(reader)["data"]
 
