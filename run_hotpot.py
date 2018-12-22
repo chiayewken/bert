@@ -35,7 +35,7 @@ def convert_hotpot_to_squad_format(json_dict):
                     context=context_joined,
                     answer_start=answer_start,
                     answer=answer,
-                    id=count,
+                    id=str(count),  # SquadExample.__repr__ only accepts type==str
                     is_impossible=False,
                     question=example["question"],
                 )
