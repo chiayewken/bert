@@ -28,13 +28,14 @@ import optimization
 import tokenization
 import six
 import tensorflow as tf
+import tqdm
 
 
 class SquadExample(object):
-    """A single training/test example for simple sequence classification.
-
-     For examples without an answer, the start and end position are -1.
-  """
+    """
+    A single training/test example for simple sequence classification.
+    For examples without an answer, the start and end position are -1.
+    """
 
     def __init__(
         self,
@@ -197,13 +198,14 @@ def convert_examples_to_features(
     max_query_length,
     is_training,
     output_fn,
+    expected_num_samples=None,
 ):
     """Loads a data file into a list of `InputBatch`s."""
 
     unique_id = 1000000000
     example_index = 0
 
-    for example in examples:
+    for example in tqdm.tqdm(examples, total=expected_num_samples):
         query_tokens = tokenizer.tokenize(example.question_text)
 
         if len(query_tokens) > max_query_length:
