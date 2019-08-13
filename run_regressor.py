@@ -696,8 +696,8 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
           train_op=train_op,
           scaffold_fn=scaffold_fn)
     elif mode == tf.estimator.ModeKeys.EVAL:
-      eval_metrics = (metric_fn,
-                      [per_example_loss, label_ids, logits, is_real_example])
+      # eval_metrics = (metric_fn, [per_example_loss, label_ids, logits, is_real_example])
+      eval_metrics = (metric_fn, [per_example_loss, label_ids, logits])  # new
       output_spec = tf.contrib.tpu.TPUEstimatorSpec(
           mode=mode,
           loss=total_loss,
@@ -713,12 +713,13 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
   return model_fn
 
 
-def metric_fn(per_example_loss, label_ids, logits, is_real_example=None):
+def metric_fn(per_example_loss, label_ids, logits):
     # new
     # predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
     # accuracy = tf.metrics.accuracy(
     #     labels=label_ids, predictions=predictions, weights=is_real_example)
-    loss = tf.metrics.mean(values=per_example_loss, weights=is_real_example)
+    # loss = tf.metrics.mean(values=per_example_loss, weights=is_real_example)
+    loss = tf.metrics.mean(values=per_example_loss)
     return {
         # "eval_accuracy": accuracy,
         "eval_loss": loss,

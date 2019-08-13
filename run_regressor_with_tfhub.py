@@ -108,7 +108,7 @@ def model_fn_builder(num_labels, learning_rate, num_train_steps,
           loss=total_loss,
           train_op=train_op)
     elif mode == tf.estimator.ModeKeys.EVAL:
-      eval_metrics = (run_regressor.metric_fn, [per_example_loss, label_ids, logits, None])
+      eval_metrics = (run_regressor.metric_fn, [per_example_loss, label_ids, logits])
       output_spec = tf.contrib.tpu.TPUEstimatorSpec(
           mode=mode,
           loss=total_loss,
