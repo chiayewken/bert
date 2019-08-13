@@ -612,6 +612,9 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
     logits = tf.nn.bias_add(logits, output_bias)
 
     # new
+    return process_logits(logits, labels)
+
+def process_logits(logits, labels):
     per_example_loss = tf.square(logits - labels)
     probabilities = per_example_loss
     # probabilities = tf.nn.softmax(logits, axis=-1)
@@ -622,7 +625,6 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
     # per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
     loss = tf.reduce_mean(per_example_loss)
     return (loss, per_example_loss, logits, probabilities)
-
 
 def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
                      num_train_steps, num_warmup_steps, use_tpu,
@@ -688,18 +690,6 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
           train_op=train_op,
           scaffold_fn=scaffold_fn)
     elif mode == tf.estimator.ModeKeys.EVAL:
-
-      def metric_fn(per_example_loss, label_ids, logits, is_real_example):
-        # new
-        # predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
-        # accuracy = tf.metrics.accuracy(
-        #     labels=label_ids, predictions=predictions, weights=is_real_example)
-        loss = tf.metrics.mean(values=per_example_loss, weights=is_real_example)
-        return {
-            # "eval_accuracy": accuracy,
-            "eval_loss": loss,
-        }
-
       eval_metrics = (metric_fn,
                       [per_example_loss, label_ids, logits, is_real_example])
       output_spec = tf.contrib.tpu.TPUEstimatorSpec(
@@ -715,6 +705,18 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
     return output_spec
 
   return model_fn
+
+
+def metric_fn(per_example_loss, label_ids, logits, is_real_example):
+    # new
+    # predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
+    # accuracy = tf.metrics.accuracy(
+    #     labels=label_ids, predictions=predictions, weights=is_real_example)
+    loss = tf.metrics.mean(values=per_example_loss, weights=is_real_example)
+    return {
+        # "eval_accuracy": accuracy,
+        "eval_loss": loss,
+    }
 
 
 # This function is not used by this file but is still used by the Colab and
