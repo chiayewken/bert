@@ -713,7 +713,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
   return model_fn
 
 
-def metric_fn(per_example_loss, label_ids, logits, is_real_example):
+def metric_fn(per_example_loss, label_ids, logits, is_real_example=None):
     # new
     # predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
     # accuracy = tf.metrics.accuracy(
