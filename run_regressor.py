@@ -1045,6 +1045,8 @@ def main(_):
         probabilities = prediction["probabilities"]
         if i >= num_actual_predict_examples:
           break
+        if type(probabilities) != list:  # new  # in case single float
+            probabilities = [probabilities]
         output_line = "\t".join(
             str(class_probability)
             for class_probability in probabilities) + "\n"
