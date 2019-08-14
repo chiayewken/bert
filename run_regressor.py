@@ -175,6 +175,7 @@ class InputFeatures(object):
     self.label_id = label_id
     self.is_real_example = is_real_example
 
+
 class DataProcessor(object):
   """Base class for data converters for sequence classification data sets."""
 
@@ -366,12 +367,10 @@ class ColaProcessor(DataProcessor):
       guid = "%s-%s" % (set_type, i)
       if set_type == "test":
         text_a = tokenization.convert_to_unicode(line[1])
-        # label = "0"  # new
-        label = float("0")
+        label = "0"
       else:
         text_a = tokenization.convert_to_unicode(line[3])
-        # label = tokenization.convert_to_unicode(line[1])  # new
-        label = float(tokenization.convert_to_unicode(line[1]))
+        label = tokenization.convert_to_unicode(line[1])
       examples.append(
           InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
     return examples
@@ -650,39 +649,20 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
 
     logits = tf.matmul(output_layer, output_weights, transpose_b=True)
     logits = tf.nn.bias_add(logits, output_bias)
-    logits = tf.squeeze(logits, [-1])
+    # probabilities = tf.nn.softmax(logits, axis=-1)
+    # log_probs = tf.nn.log_softmax(logits, axis=-1)
 
+    # one_hot_labels = tf.one_hot(labels, depth=num_labels, dtype=tf.float32)
 
+    # per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
     # new
-    return get_model_outputs(logits, labels)
-    # return get_model_outputs(output_layer, labels)
-
-def get_model_outputs(logits, labels):
+    logits = tf.squeeze(logits, [-1])
     per_example_loss = tf.square(logits - labels)
     probabilities = logits
     loss = tf.reduce_mean(per_example_loss)
+
     return (loss, per_example_loss, logits, probabilities)
 
-# def get_model_outputs(output_layer, labels):
-#     dense = tf.keras.layers.Dense(
-#         units=1,
-#         kernel_initializer=tf.truncated_normal_initializer(stddev=0.02),
-#         bias_initializer=tf.zeros_initializer(),
-#     )
-#     logits = dense(output_layer)
-#     # logits = tf.matmul(output_layer, output_weights, transpose_b=True)
-#     # logits = tf.nn.bias_add(logits, output_bias)
-#
-#     per_example_loss = tf.square(logits - labels)
-#     probabilities = logits
-#     # probabilities = tf.nn.softmax(logits, axis=-1)
-#     # log_probs = tf.nn.log_softmax(logits, axis=-1)
-#     #
-#     # one_hot_labels = tf.one_hot(labels, depth=num_labels, dtype=tf.float32)
-#     #
-#     # per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
-#     loss = tf.reduce_mean(per_example_loss)
-#     return (loss, per_example_loss, logits, probabilities)
 
 def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
                      num_train_steps, num_warmup_steps, use_tpu,
@@ -786,7 +766,6 @@ def metric_fn(per_example_loss, label_ids, logits, is_real_example):  # new
         'mean_per_example_loss': loss,
     }
 
-
 # This function is not used by this file but is still used by the Colab and
 # people who depend on it.
 def input_fn_builder(features, seq_length, is_training, drop_remainder):
@@ -864,11 +843,11 @@ def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
 
   processors = {
-      "cola": ColaProcessor,
+      # "cola": ColaProcessor,
       # "mnli": MnliProcessor,
       # "mrpc": MrpcProcessor,
       # "xnli": XnliProcessor,
-      "sts": STSProcessor
+      "sts-b": STSProcessor
   }
 
   tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
