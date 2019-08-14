@@ -771,7 +771,7 @@ def metric_fn(per_example_loss, label_ids, logits, is_real_example):  # new
         'label_ids': concat2,
         'pearson': pearson,
         'mse': mse,
-        'loss': loss,
+        'mean_per_example_loss': loss,
     }
 
 
