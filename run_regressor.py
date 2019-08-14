@@ -663,7 +663,7 @@ def get_model_outputs(output_layer, labels):
     # logits = tf.nn.bias_add(logits, output_bias)
 
     per_example_loss = tf.square(logits - labels)
-    probabilities = per_example_loss
+    probabilities = logits
     # probabilities = tf.nn.softmax(logits, axis=-1)
     # log_probs = tf.nn.log_softmax(logits, axis=-1)
     #
@@ -766,21 +766,10 @@ def metric_fn(per_example_loss, label_ids, logits):  # new
     mse_from_per_example_loss = tf.metrics.mean(per_example_loss)
     mse = tf.metrics.mean_squared_error(label_ids, logits)
 
-    # Compute Spearman correlation
-    size = tf.size(logits)
-    indice_of_ranks_pred = tf.nn.top_k(logits, k=size)[1]
-    indice_of_ranks_label = tf.nn.top_k(label_ids, k=size)[1]
-    rank_pred = tf.nn.top_k(-indice_of_ranks_pred, k=size)[1]
-    rank_label = tf.nn.top_k(-indice_of_ranks_label, k=size)[1]
-    rank_pred = tf.to_float(rank_pred)
-    rank_label = tf.to_float(rank_label)
-    spearman = tf.contrib.metrics.streaming_pearson_correlation(rank_pred, rank_label)
-
     return {
         'pred': concat1,
         'label_ids': concat2,
         'pearson': pearson,
-        'spearman': spearman,
         'MSE': mse,
         'MSE from per_example_loss': mse_from_per_example_loss,
     }
