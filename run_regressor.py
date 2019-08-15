@@ -375,7 +375,40 @@ class ColaProcessor(DataProcessor):
           InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
     return examples
 
-class STSProcessor(DataProcessor):
+
+class SickProcessor(DataProcessor):
+  """Processor for the SICK data set (not in GLUE) (normalized version)."""
+
+  def get_train_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+
+  def get_dev_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+
+  # ADDED
+  def get_test_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+
+  def _create_examples(self, lines, set_type):
+    """Creates examples for the training and dev sets."""
+    examples = []
+    for (i, line) in enumerate(lines):
+        if i == 0:
+            continue
+        guid = "%s-%s" % (set_type, tokenization.convert_to_unicode(line[0]))
+        text_a = tokenization.convert_to_unicode(line[1])
+        text_b = tokenization.convert_to_unicode(line[2])
+        label = float(line[4])
+        examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+    return examples
+
+class StsProcessor(DataProcessor):
   """Processor for the STS-B data set (GLUE version)."""
 
   def get_train_examples(self, data_dir):
@@ -838,6 +871,52 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
     features.append(feature)
   return features
 
+def run_evaluate(estimator, FLAGS, label_list, tokenizer, eval_examples, eval_file, output_eval_file):
+  # eval_examples = processor.get_dev_examples(FLAGS.data_dir)
+  num_actual_eval_examples = len(eval_examples)
+  if FLAGS.use_tpu:
+      # TPU requires a fixed batch size for all batches, therefore the number
+      # of examples must be a multiple of the batch size, or else examples
+      # will get dropped. So we pad with fake examples which are ignored
+      # later on. These do NOT count towards the metric (all tf.metrics
+      # support a per-instance weight, and these get a weight of 0.0).
+      while len(eval_examples) % FLAGS.eval_batch_size != 0:
+          eval_examples.append(PaddingInputExample())
+
+  # eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
+  file_based_convert_examples_to_features(
+      eval_examples, label_list, FLAGS.max_seq_length, tokenizer, eval_file)
+
+  tf.logging.info("***** Running evaluation *****")
+  tf.logging.info("  Num examples = %d (%d actual, %d padding)",
+                  len(eval_examples), num_actual_eval_examples,
+                  len(eval_examples) - num_actual_eval_examples)
+  tf.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
+
+  # This tells the estimator to run through the entire set.
+  eval_steps = None
+  # However, if running eval on the TPU, you will need to specify the
+  # number of steps.
+  if FLAGS.use_tpu:
+      assert len(eval_examples) % FLAGS.eval_batch_size == 0
+      eval_steps = int(len(eval_examples) // FLAGS.eval_batch_size)
+
+  eval_drop_remainder = True if FLAGS.use_tpu else False
+  eval_input_fn = file_based_input_fn_builder(
+      input_file=eval_file,
+      seq_length=FLAGS.max_seq_length,
+      is_training=False,
+      drop_remainder=eval_drop_remainder)
+
+  result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
+
+  # output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
+  with tf.gfile.GFile(output_eval_file, "w") as writer:
+      tf.logging.info("***** Eval results *****")
+      for key in sorted(result.keys()):
+          tf.logging.info("  %s = %s", key, str(result[key]))
+          writer.write("%s = %s\n" % (key, str(result[key])))
+
 
 def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
@@ -847,7 +926,7 @@ def main(_):
       # "mnli": MnliProcessor,
       # "mrpc": MrpcProcessor,
       # "xnli": XnliProcessor,
-      "sts-b": STSProcessor
+      "sts-b": StsProcessor
   }
 
   tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
@@ -940,50 +1019,15 @@ def main(_):
     estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
 
   if FLAGS.do_eval:
-    eval_examples = processor.get_dev_examples(FLAGS.data_dir)
-    num_actual_eval_examples = len(eval_examples)
-    if FLAGS.use_tpu:
-      # TPU requires a fixed batch size for all batches, therefore the number
-      # of examples must be a multiple of the batch size, or else examples
-      # will get dropped. So we pad with fake examples which are ignored
-      # later on. These do NOT count towards the metric (all tf.metrics
-      # support a per-instance weight, and these get a weight of 0.0).
-      while len(eval_examples) % FLAGS.eval_batch_size != 0:
-        eval_examples.append(PaddingInputExample())
-
-    eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
-    file_based_convert_examples_to_features(
-        eval_examples, label_list, FLAGS.max_seq_length, tokenizer, eval_file)
-
-    tf.logging.info("***** Running evaluation *****")
-    tf.logging.info("  Num examples = %d (%d actual, %d padding)",
-                    len(eval_examples), num_actual_eval_examples,
-                    len(eval_examples) - num_actual_eval_examples)
-    tf.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
-
-    # This tells the estimator to run through the entire set.
-    eval_steps = None
-    # However, if running eval on the TPU, you will need to specify the
-    # number of steps.
-    if FLAGS.use_tpu:
-      assert len(eval_examples) % FLAGS.eval_batch_size == 0
-      eval_steps = int(len(eval_examples) // FLAGS.eval_batch_size)
-
-    eval_drop_remainder = True if FLAGS.use_tpu else False
-    eval_input_fn = file_based_input_fn_builder(
-        input_file=eval_file,
-        seq_length=FLAGS.max_seq_length,
-        is_training=False,
-        drop_remainder=eval_drop_remainder)
-
-    result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
-
-    output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
-    with tf.gfile.GFile(output_eval_file, "w") as writer:
-      tf.logging.info("***** Eval results *****")
-      for key in sorted(result.keys()):
-        tf.logging.info("  %s = %s", key, str(result[key]))
-        writer.write("%s = %s\n" % (key, str(result[key])))
+    run_evaluate(
+        estimator,
+        FLAGS,
+        label_list,
+        tokenizer,
+        eval_examples=processor.get_dev_examples(FLAGS.data_dir),
+        eval_file=os.path.join(FLAGS.output_dir, "eval.tf_record"),
+        output_eval_file=os.path.join(FLAGS.output_dir, "eval_results.txt"),
+    )
 
   if FLAGS.do_predict:
     predict_examples = processor.get_test_examples(FLAGS.data_dir)
