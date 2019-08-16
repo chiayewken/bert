@@ -962,6 +962,7 @@ def run_predict(estimator, FLAGS, label_list, tokenizer, predict_examples,
       writer.write(output_line)
       num_written_lines += 1
   assert num_written_lines == num_actual_predict_examples
+  tf.logging.warn("Predictions saved to {}".format(output_predict_file))
 
 
 def main(_):
