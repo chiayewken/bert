@@ -917,6 +917,7 @@ def run_evaluate(estimator, FLAGS, label_list, tokenizer, eval_examples,
 
 def run_predict(estimator, FLAGS, label_list, tokenizer, predict_examples,
                 predict_file, output_predict_file):
+  tf.logging.set_verbosity(tf.logging.WARN)  # estimator.predict too verbose
   # predict_examples = processor.get_test_examples(FLAGS.data_dir)
   num_actual_predict_examples = len(predict_examples)
   if FLAGS.use_tpu:
@@ -1077,7 +1078,6 @@ def main(_):
     # )
 
     # I want to manually score the predictions for both eval & test
-    tf.logging.set_verbosity(tf.logging.WARN)  # estimator.predict too verbose
     run_predict(
         estimator,
         FLAGS,
