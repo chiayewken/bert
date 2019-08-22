@@ -1067,36 +1067,36 @@ def main(_):
     estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
 
   if FLAGS.do_eval:
-    # run_evaluate(
-    #     estimator,
-    #     FLAGS,
-    #     label_list,
-    #     tokenizer,
-    #     eval_examples=processor.get_dev_examples(FLAGS.data_dir),
-    #     eval_file=os.path.join(FLAGS.output_dir, "eval.tf_record"),
-    #     output_eval_file=os.path.join(FLAGS.output_dir, "eval_results.txt"),
-    # )
-
-    # I want to manually score the predictions for both eval & test
-    run_predict(
+    run_evaluate(
         estimator,
         FLAGS,
         label_list,
         tokenizer,
-        predict_examples=processor.get_dev_examples(FLAGS.data_dir),
-        predict_file=os.path.join(FLAGS.output_dir, "eval.tf_record"),
-        output_predict_file=os.path.join(FLAGS.output_dir, "eval_results.tsv"),
+        eval_examples=processor.get_dev_examples(FLAGS.data_dir),
+        eval_file=os.path.join(FLAGS.output_dir, "eval.tf_record"),
+        output_eval_file=os.path.join(FLAGS.output_dir, "eval_results.txt"),
     )
 
   if FLAGS.do_predict:
-    run_predict(
-        estimator,
-        FLAGS,
-        label_list,
-        tokenizer,
-        predict_examples=processor.get_test_examples(FLAGS.data_dir),
-        predict_file=os.path.join(FLAGS.output_dir, "predict.tf_record"),
-        output_predict_file=os.path.join(FLAGS.output_dir, "test_results.tsv"),
+
+    def _run_predict(examples: list, file_in: str, file_out: str) -> None:
+      run_predict(estimator, FLAGS, label_list, tokenizer, examples, file_in,
+                  file_out)
+
+    _run_predict(
+        examples=processor.get_train_examples(FLAGS.data_dir),
+        file_in=os.path.join(FLAGS.output_dir, "train.tf_record"),
+        file_out=os.path.join(FLAGS.output_dir, "train_results.tsv"),
+    )
+    _run_predict(
+        examples=processor.get_dev_examples(FLAGS.data_dir),
+        file_in=os.path.join(FLAGS.output_dir, "eval.tf_record"),
+        file_out=os.path.join(FLAGS.output_dir, "eval_results.tsv"),
+    )
+    _run_predict(
+        examples=processor.get_test_examples(FLAGS.data_dir),
+        file_in=os.path.join(FLAGS.output_dir, "predict.tf_record"),
+        file_out=os.path.join(FLAGS.output_dir, "test_results.tsv"),
     )
 
 
