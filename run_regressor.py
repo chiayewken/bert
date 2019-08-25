@@ -271,7 +271,8 @@ class MnliProcessor(DataProcessor):
 
   def get_labels(self):
     """See base class."""
-    return ["contradiction", "entailment", "neutral"]
+    # return ["contradiction", "entailment", "neutral"]
+    return ["score"]
 
   def _create_examples(self, lines, set_type):
     """Creates examples for the training and dev sets."""
@@ -286,6 +287,10 @@ class MnliProcessor(DataProcessor):
         label = "contradiction"
       else:
         label = tokenization.convert_to_unicode(line[-1])
+
+      label_map = {"contradiction": 1.0, "entailment": 0.0, "neutral": 0.5}
+      label = label_map[label]
+
       examples.append(
           InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
     return examples
