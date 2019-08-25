@@ -990,7 +990,7 @@ def main(_):
 
   processors = {
       # "cola": ColaProcessor,
-      # "mnli": MnliProcessor,
+      "mnli": MnliProcessor,
       # "mrpc": MrpcProcessor,
       # "xnli": XnliProcessor,
       "sts-b": StsProcessor
