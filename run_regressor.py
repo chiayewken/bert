@@ -124,6 +124,8 @@ flags.DEFINE_integer(
     "num_tpu_cores", 8,
     "Only used if `use_tpu` is True. Total number of TPU cores to use.")
 
+flags.DEFINE_bool("use_adapters", False, "Whether to train only adapters.")
+
 
 class InputExample(object):
   """A single training/test example for simple sequence classification."""
@@ -643,14 +645,17 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
 
 
 def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
-                 labels, num_labels, use_one_hot_embeddings):
+                 labels, num_labels, use_one_hot_embeddings, use_adapters):
   """Creates a classification model."""
-  model = modeling.BertModel(config=bert_config,
-                             is_training=is_training,
-                             input_ids=input_ids,
-                             input_mask=input_mask,
-                             token_type_ids=segment_ids,
-                             use_one_hot_embeddings=use_one_hot_embeddings)
+  model = modeling.BertModel(
+      config=bert_config,
+      is_training=is_training,
+      input_ids=input_ids,
+      input_mask=input_mask,
+      token_type_ids=segment_ids,
+      use_one_hot_embeddings=use_one_hot_embeddings,
+      adapter_fn=("feedforward_adapter" if use_adapters else ""),
+  )
 
   # In the demo, we are doing a simple classification task on the entire
   # segment.
@@ -663,10 +668,13 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
 
   output_weights = tf.get_variable(
       "output_weights", [num_labels, hidden_size],
-      initializer=tf.truncated_normal_initializer(stddev=0.02))
+      initializer=tf.truncated_normal_initializer(stddev=0.02),
+      collections=["head", tf.GraphKeys.GLOBAL_VARIABLES])
 
-  output_bias = tf.get_variable("output_bias", [num_labels],
-                                initializer=tf.zeros_initializer())
+  output_bias = tf.get_variable(
+      "output_bias", [num_labels],
+      initializer=tf.zeros_initializer(),
+      collections=["head", tf.GraphKeys.GLOBAL_VARIABLES])
 
   with tf.variable_scope("loss"):
     if is_training:
@@ -692,7 +700,7 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
 
 def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
                      num_train_steps, num_warmup_steps, use_tpu,
-                     use_one_hot_embeddings):
+                     use_one_hot_embeddings, use_adapters):
   """Returns `model_fn` closure for TPUEstimator."""
   def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
     """The `model_fn` for TPUEstimator."""
@@ -713,10 +721,9 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
 
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-    (total_loss, per_example_loss, logits,
-     probabilities) = create_model(bert_config, is_training, input_ids,
-                                   input_mask, segment_ids, label_ids,
-                                   num_labels, use_one_hot_embeddings)
+    (total_loss, per_example_loss, logits, probabilities) = create_model(
+        bert_config, is_training, input_ids, input_mask, segment_ids,
+        label_ids, num_labels, use_one_hot_embeddings, use_adapters)
 
     tvars = tf.trainable_variables()
     initialized_variable_names = {}
@@ -745,14 +752,21 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
     output_spec = None
     if mode == tf.estimator.ModeKeys.TRAIN:
 
-      train_op = optimization.create_optimizer(total_loss, learning_rate,
-                                               num_train_steps,
-                                               num_warmup_steps, use_tpu)
+      train_op = optimization.create_optimizer(
+          total_loss,
+          learning_rate,
+          num_train_steps,
+          num_warmup_steps,
+          use_tpu,
+          train_adapters_only=use_adapters,
+      )
 
-      output_spec = tf.contrib.tpu.TPUEstimatorSpec(mode=mode,
-                                                    loss=total_loss,
-                                                    train_op=train_op,
-                                                    scaffold_fn=scaffold_fn)
+      output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+          mode=mode,
+          loss=total_loss,
+          train_op=train_op,
+          scaffold_fn=scaffold_fn,
+      )
     elif mode == tf.estimator.ModeKeys.EVAL:
       eval_metrics = (metric_fn,
                       [per_example_loss, label_ids, logits, is_real_example])
@@ -824,18 +838,18 @@ def input_fn_builder(features, seq_length, is_training, drop_remainder):
         "input_ids":
             tf.constant(all_input_ids,
                         shape=[num_examples, seq_length],
-                        dtype=tf.int32),
+                        dtype=tf.int32,),
         "input_mask":
             tf.constant(all_input_mask,
                         shape=[num_examples, seq_length],
-                        dtype=tf.int32),
+                        dtype=tf.int32,),
         "segment_ids":
             tf.constant(all_segment_ids,
                         shape=[num_examples, seq_length],
-                        dtype=tf.int32),
+                        dtype=tf.int32,),
         "label_ids":  # tf.constant(all_label_ids, shape=[num_examples], dtype=tf.int32),
             tf.constant(all_label_ids, shape=[num_examples
-                                             ], dtype=tf.float32),  # new
+                                             ], dtype=tf.float32,),  # new
     })
 
     if is_training:
@@ -1031,14 +1045,17 @@ def main(_):
         len(train_examples) / FLAGS.train_batch_size * FLAGS.num_train_epochs)
     num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
 
-  model_fn = model_fn_builder(bert_config=bert_config,
-                              num_labels=len(label_list),
-                              init_checkpoint=FLAGS.init_checkpoint,
-                              learning_rate=FLAGS.learning_rate,
-                              num_train_steps=num_train_steps,
-                              num_warmup_steps=num_warmup_steps,
-                              use_tpu=FLAGS.use_tpu,
-                              use_one_hot_embeddings=FLAGS.use_tpu)
+  model_fn = model_fn_builder(
+      bert_config=bert_config,
+      num_labels=len(label_list),
+      init_checkpoint=FLAGS.init_checkpoint,
+      learning_rate=FLAGS.learning_rate,
+      num_train_steps=num_train_steps,
+      num_warmup_steps=num_warmup_steps,
+      use_tpu=FLAGS.use_tpu,
+      use_one_hot_embeddings=FLAGS.use_tpu,
+      use_adapters=FLAGS.use_adapters,
+  )
 
   # If TPU is not available, this will fall back to normal Estimator on CPU
   # or GPU.

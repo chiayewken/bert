@@ -30,7 +30,6 @@ import tensorflow as tf
 
 class BertConfig(object):
   """Configuration for `BertModel`."""
-
   def __init__(self,
                vocab_size,
                hidden_size=768,
@@ -127,7 +126,6 @@ class BertModel(object):
   ...
   ```
   """
-
   def __init__(self,
                config,
                is_training,
@@ -135,7 +133,8 @@ class BertModel(object):
                input_mask=None,
                token_type_ids=None,
                use_one_hot_embeddings=False,
-               scope=None):
+               scope=None,
+               adapter_fn="feedforward_adapter"):
     """Constructor for BertModel.
 
     Args:
@@ -148,6 +147,8 @@ class BertModel(object):
       use_one_hot_embeddings: (optional) bool. Whether to use one-hot word
         embeddings or tf.embedding_lookup() for the word embeddings.
       scope: (optional) variable scope. Defaults to "bert".
+      adapter_fn: (optional) string identifying trainable adapter that takes
+        as input a Tensor and returns a Tensor of the same shape.
 
     Raises:
       ValueError: The config is invalid or one of the input tensor shapes
@@ -213,7 +214,8 @@ class BertModel(object):
             hidden_dropout_prob=config.hidden_dropout_prob,
             attention_probs_dropout_prob=config.attention_probs_dropout_prob,
             initializer_range=config.initializer_range,
-            do_return_all_layers=True)
+            do_return_all_layers=True,
+            adapter_fn=get_adapter(adapter_fn))
 
       self.sequence_output = self.all_encoder_layers[-1]
       # The "pooler" converts the encoded sequence tensor of shape
@@ -224,7 +226,8 @@ class BertModel(object):
       with tf.variable_scope("pooler"):
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token. We assume that this has been pre-trained
-        first_token_tensor = tf.squeeze(self.sequence_output[:, 0:1, :], axis=1)
+        first_token_tensor = tf.squeeze(self.sequence_output[:, 0:1, :],
+                                        axis=1)
         self.pooled_output = tf.layers.dense(
             first_token_tensor,
             config.hidden_size,
@@ -314,6 +317,79 @@ def get_activation(activation_string):
     raise ValueError("Unsupported activation: %s" % act)
 
 
+def feedforward_adapter(input_tensor, hidden_size=64, init_scale=1e-3):
+  """A feedforward adapter layer with a bottleneck.
+
+  Implements a bottleneck layer with a user-specified nonlinearity and an
+  identity residual connection. All variables created are added to the
+  "adapters" collection.
+
+  Args:
+    input_tensor: input Tensor of shape [batch size, hidden dimension]
+    hidden_size: dimension of the bottleneck layer.
+    init_scale: Scale of the initialization distribution used for weights.
+
+  Returns:
+    Tensor of the same shape as x.
+  """
+  with tf.variable_scope("adapters"):
+    in_size = input_tensor.get_shape().as_list()[1]
+    w1 = tf.get_variable(
+        "weights1", [in_size, hidden_size],
+        initializer=tf.truncated_normal_initializer(stddev=init_scale),
+        collections=["adapters", tf.GraphKeys.GLOBAL_VARIABLES])
+    b1 = tf.get_variable(
+        "biases1", [1, hidden_size],
+        initializer=tf.zeros_initializer(),
+        collections=["adapters", tf.GraphKeys.GLOBAL_VARIABLES])
+    net = tf.tensordot(input_tensor, w1, [[1], [0]]) + b1
+
+    net = gelu(net)
+
+    w2 = tf.get_variable(
+        "weights2", [hidden_size, in_size],
+        initializer=tf.truncated_normal_initializer(stddev=init_scale),
+        collections=["adapters", tf.GraphKeys.GLOBAL_VARIABLES])
+    b2 = tf.get_variable(
+        "biases2", [1, in_size],
+        initializer=tf.zeros_initializer(),
+        collections=["adapters", tf.GraphKeys.GLOBAL_VARIABLES])
+    net = tf.tensordot(net, w2, [[1], [0]]) + b2
+
+  return net + input_tensor
+
+
+def get_adapter(function_string):
+  """Maps a string to a Python function.
+
+  Args:
+    function_string: String name of the adapter function.
+
+  Returns:
+    A Python function corresponding to the adatper function.
+    `function_string` is None or empty, will return None.
+    If `function_string` is not a string, it will return `function_string`.
+
+  Raises:
+    ValueError: The `function_string` does not correspond to a known
+      adapter.
+  """
+
+  # We assume that anything that"s not a string is already an adapter
+  # function, so we just return it.
+  if not isinstance(function_string, six.string_types):
+    return function_string
+
+  if not function_string:
+    return None
+
+  fn = function_string.lower()
+  if fn == "feedforward_adapter":
+    return feedforward_adapter
+  else:
+    raise ValueError("Unsupported adapters: %s" % fn)
+
+
 def get_assignment_map_from_checkpoint(tvars, init_checkpoint):
   """Compute the union of the current variables and checkpoint variables."""
   assignment_map = {}
@@ -362,7 +438,11 @@ def dropout(input_tensor, dropout_prob):
 def layer_norm(input_tensor, name=None):
   """Run layer normalization on the last dimension of the tensor."""
   return tf.contrib.layers.layer_norm(
-      inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1, scope=name)
+      inputs=input_tensor,
+      begin_norm_axis=-1,
+      begin_params_axis=-1,
+      scope=name,
+      variables_collections=["layer_norm", tf.GraphKeys.GLOBAL_VARIABLES])
 
 
 def layer_norm_and_dropout(input_tensor, dropout_prob, name=None):
@@ -538,16 +618,16 @@ def create_attention_mask_from_input_mask(from_tensor, to_mask):
   to_shape = get_shape_list(to_mask, expected_rank=2)
   to_seq_length = to_shape[1]
 
-  to_mask = tf.cast(
-      tf.reshape(to_mask, [batch_size, 1, to_seq_length]), tf.float32)
+  to_mask = tf.cast(tf.reshape(to_mask, [batch_size, 1, to_seq_length]),
+                    tf.float32)
 
   # We don't assume that `from_tensor` is a mask (although it could be). We
   # don't actually care if we attend *from* padding tokens (only *to* padding)
   # tokens so we create a tensor of all ones.
   #
   # `broadcast_ones` = [batch_size, from_seq_length, 1]
-  broadcast_ones = tf.ones(
-      shape=[batch_size, from_seq_length, 1], dtype=tf.float32)
+  broadcast_ones = tf.ones(shape=[batch_size, from_seq_length, 1],
+                           dtype=tf.float32)
 
   # Here we broadcast along two dimensions to create the mask.
   mask = broadcast_ones * to_mask
@@ -625,7 +705,6 @@ def attention_layer(from_tensor,
   Raises:
     ValueError: Any of the arguments or tensor shapes are invalid.
   """
-
   def transpose_for_scores(input_tensor, batch_size, num_attention_heads,
                            seq_length, width):
     output_tensor = tf.reshape(
@@ -646,7 +725,8 @@ def attention_layer(from_tensor,
     from_seq_length = from_shape[1]
     to_seq_length = to_shape[1]
   elif len(from_shape) == 2:
-    if (batch_size is None or from_seq_length is None or to_seq_length is None):
+    if (batch_size is None or from_seq_length is None
+        or to_seq_length is None):
       raise ValueError(
           "When passing in rank 2 tensors to attention_layer, the values "
           "for `batch_size`, `from_seq_length`, and `to_seq_length` "
@@ -761,7 +841,8 @@ def transformer_model(input_tensor,
                       hidden_dropout_prob=0.1,
                       attention_probs_dropout_prob=0.1,
                       initializer_range=0.02,
-                      do_return_all_layers=False):
+                      do_return_all_layers=False,
+                      adapter_fn=None):
   """Multi-headed, multi-layer Transformer from "Attention is All You Need".
 
   This is almost an exact implementation of the original Transformer encoder.
@@ -791,6 +872,8 @@ def transformer_model(input_tensor,
       normal).
     do_return_all_layers: Whether to also return all layers or just the final
       layer.
+    adapter_fn: (optional) trainable adapter function that takes as input a
+      Tensor and returns a Tensor of the same shape.
 
   Returns:
     float Tensor of shape [batch_size, seq_length, hidden_size], the final
@@ -860,6 +943,8 @@ def transformer_model(input_tensor,
               hidden_size,
               kernel_initializer=create_initializer(initializer_range))
           attention_output = dropout(attention_output, hidden_dropout_prob)
+          if adapter_fn:
+            attention_output = adapter_fn(attention_output)
           attention_output = layer_norm(attention_output + layer_input)
 
       # The activation is only applied to the "intermediate" hidden layer.
@@ -877,6 +962,8 @@ def transformer_model(input_tensor,
             hidden_size,
             kernel_initializer=create_initializer(initializer_range))
         layer_output = dropout(layer_output, hidden_dropout_prob)
+        if adapter_fn:
+          layer_output = adapter_fn(layer_output)
         layer_output = layer_norm(layer_output + attention_output)
         prev_output = layer_output
         all_layer_outputs.append(layer_output)
