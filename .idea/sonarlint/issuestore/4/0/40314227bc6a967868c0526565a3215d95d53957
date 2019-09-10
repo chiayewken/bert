@@ -1,0 +1,6 @@
+
+{python:S107³"^Function "create_training_instances" has 8 parameters, which is greater than the 7 authorized.(‚κ‘ψÿÿÿÿ
+€python:S107ΰ"cFunction "create_instances_from_document" has 8 parameters, which is greater than the 7 authorized.(ΆΧΉΖÿÿÿÿÿ
+lpython:S3776`"TRefactor this function to reduce its Cognitive Complexity from 19 to the 15 allowed.(Γ¦„
+rpython:S3776ί"TRefactor this function to reduce its Cognitive Complexity from 57 to the 15 allowed.(¦Ψΰϊÿÿÿÿ
+rpython:S3776Φ"TRefactor this function to reduce its Cognitive Complexity from 32 to the 15 allowed.(θιΉ”ώÿÿÿÿ

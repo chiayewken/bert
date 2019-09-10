@@ -1,0 +1,5 @@
+
+lpython:S107ë"UFunction "model_fn_builder" has 8 parameters, which is greater than the 7 authorized.(Ø…÷
+lpython:S3776ë"TRefactor this function to reduce its Cognitive Complexity from 20 to the 15 allowed.(Ø…÷
+ipython:S107¾"QFunction "create_model" has 8 parameters, which is greater than the 7 authorized.(ü›î
+mpython:S3776"TRefactor this function to reduce its Cognitive Complexity from 33 to the 15 allowed.(ò×Ñğ
