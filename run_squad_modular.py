@@ -1185,6 +1185,7 @@ def model_predict(
     null_score_diff_threshold,
     verbose_logging,
 ):
+  tf.logging.set_verbosity(tf.logging.WARN)
   eval_examples = read_squad_examples(
       input_file=predict_file,
       is_training=False,
