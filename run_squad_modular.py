@@ -1133,6 +1133,122 @@ def validate_flags_or_throw(
         "(%d) + 3" % (max_seq_length, max_query_length))
 
 
+def run_train(estimator, output_dir, train_examples, tokenizer, max_seq_length,
+              doc_stride, max_query_length, train_batch_size, num_train_steps):
+  # We write to a temporary file to avoid storing very large constant tensors
+  # in memory.
+  train_writer = FeatureWriter(filename=os.path.join(output_dir,
+                                                     "train.tf_record"),
+                               is_training=True)
+  convert_examples_to_features(examples=train_examples,
+                               tokenizer=tokenizer,
+                               max_seq_length=max_seq_length,
+                               doc_stride=doc_stride,
+                               max_query_length=max_query_length,
+                               is_training=True,
+                               output_fn=train_writer.process_feature)
+  train_writer.close()
+
+  tf.logging.info("***** Running training *****")
+  tf.logging.info("  Num orig examples = %d", len(train_examples))
+  tf.logging.info("  Num split examples = %d", train_writer.num_features)
+  tf.logging.info("  Batch size = %d", train_batch_size)
+  tf.logging.info("  Num steps = %d", num_train_steps)
+  del train_examples
+
+  train_input_fn = input_fn_builder(input_file=train_writer.filename,
+                                    seq_length=max_seq_length,
+                                    is_training=True,
+                                    drop_remainder=True)
+  estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
+
+
+def run_predict(estimator, predict_file, version_2_with_negative, output_dir,
+                tokenizer, max_seq_length, doc_stride, max_query_length,
+                predict_batch_size, n_best_size, max_answer_length,
+                do_lower_case, null_score_diff_threshold, verbose_logging):
+  eval_examples = read_squad_examples(
+      input_file=predict_file,
+      is_training=False,
+      version_2_with_negative=version_2_with_negative)
+
+  eval_writer = FeatureWriter(filename=os.path.join(output_dir,
+                                                    "eval.tf_record"),
+                              is_training=False)
+  eval_features = []
+
+  def append_feature(feature):
+    eval_features.append(feature)
+    eval_writer.process_feature(feature)
+
+  convert_examples_to_features(examples=eval_examples,
+                               tokenizer=tokenizer,
+                               max_seq_length=max_seq_length,
+                               doc_stride=doc_stride,
+                               max_query_length=max_query_length,
+                               is_training=False,
+                               output_fn=append_feature)
+  eval_writer.close()
+
+  tf.logging.info("***** Running predictions *****")
+  tf.logging.info("  Num orig examples = %d", len(eval_examples))
+  tf.logging.info("  Num split examples = %d", len(eval_features))
+  tf.logging.info("  Batch size = %d", predict_batch_size)
+
+  all_results = []
+
+  predict_input_fn = input_fn_builder(input_file=eval_writer.filename,
+                                      seq_length=max_seq_length,
+                                      is_training=False,
+                                      drop_remainder=False)
+
+  # If running eval on the TPU, you will need to specify the number of
+  # steps.
+  all_results = []
+  for result in estimator.predict(predict_input_fn,
+                                  yield_single_examples=True):
+    if len(all_results) % 1000 == 0:
+      tf.logging.info("Processing example: %d" % (len(all_results)))
+    unique_id = int(result["unique_ids"])
+    start_logits = [float(x) for x in result["start_logits"].flat]
+    end_logits = [float(x) for x in result["end_logits"].flat]
+    all_results.append(
+        RawResult(unique_id=unique_id,
+                  start_logits=start_logits,
+                  end_logits=end_logits))
+
+  output_prediction_file = os.path.join(output_dir, "predictions.json")
+  output_nbest_file = os.path.join(output_dir, "nbest_predictions.json")
+  output_null_log_odds_file = os.path.join(output_dir, "null_odds.json")
+
+  write_predictions(eval_examples, eval_features, all_results, n_best_size,
+                    max_answer_length, do_lower_case, output_prediction_file,
+                    output_nbest_file, output_null_log_odds_file,
+                    version_2_with_negative, null_score_diff_threshold,
+                    verbose_logging)
+
+
+def setup_tpu(use_tpu, tpu_name, tpu_zone, gcp_project, master, output_dir,
+              save_checkpoints_steps, iterations_per_loop, num_tpu_cores):
+  tpu_cluster_resolver = None
+  if use_tpu and tpu_name:
+    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+        tpu_name, zone=tpu_zone, project=gcp_project)
+
+  is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
+  run_config = tf.contrib.tpu.RunConfig(
+      cluster=tpu_cluster_resolver,
+      master=master,
+      model_dir=output_dir,
+      save_checkpoints_steps=save_checkpoints_steps,
+      tpu_config=tf.contrib.tpu.TPUConfig(
+          iterations_per_loop=iterations_per_loop,
+          num_shards=num_tpu_cores,
+          per_host_input_for_training=is_per_host))
+
+  return run_config
+
+
 def main(
     bert_config_file=None,
     vocab_file=None,
@@ -1186,21 +1302,9 @@ def main(
   tokenizer = tokenization.FullTokenizer(vocab_file=vocab_file,
                                          do_lower_case=do_lower_case)
 
-  tpu_cluster_resolver = None
-  if use_tpu and tpu_name:
-    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-        tpu_name, zone=tpu_zone, project=gcp_project)
-
-  is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
-  run_config = tf.contrib.tpu.RunConfig(
-      cluster=tpu_cluster_resolver,
-      master=master,
-      model_dir=output_dir,
-      save_checkpoints_steps=save_checkpoints_steps,
-      tpu_config=tf.contrib.tpu.TPUConfig(
-          iterations_per_loop=iterations_per_loop,
-          num_shards=num_tpu_cores,
-          per_host_input_for_training=is_per_host))
+  run_config = setup_tpu(use_tpu, tpu_name, tpu_zone, gcp_project, master,
+                         output_dir, save_checkpoints_steps,
+                         iterations_per_loop, num_tpu_cores)
 
   train_examples = None
   num_train_steps = None
@@ -1237,93 +1341,35 @@ def main(
       predict_batch_size=predict_batch_size)
 
   if do_train:
-    # We write to a temporary file to avoid storing very large constant tensors
-    # in memory.
-    train_writer = FeatureWriter(filename=os.path.join(output_dir,
-                                                       "train.tf_record"),
-                                 is_training=True)
-    convert_examples_to_features(examples=train_examples,
-                                 tokenizer=tokenizer,
-                                 max_seq_length=max_seq_length,
-                                 doc_stride=doc_stride,
-                                 max_query_length=max_query_length,
-                                 is_training=True,
-                                 output_fn=train_writer.process_feature)
-    train_writer.close()
-
-    tf.logging.info("***** Running training *****")
-    tf.logging.info("  Num orig examples = %d", len(train_examples))
-    tf.logging.info("  Num split examples = %d", train_writer.num_features)
-    tf.logging.info("  Batch size = %d", train_batch_size)
-    tf.logging.info("  Num steps = %d", num_train_steps)
-    del train_examples
-
-    train_input_fn = input_fn_builder(input_file=train_writer.filename,
-                                      seq_length=max_seq_length,
-                                      is_training=True,
-                                      drop_remainder=True)
-    estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
+    run_train(
+        estimator,
+        output_dir,
+        train_examples,
+        tokenizer,
+        max_seq_length,
+        doc_stride,
+        max_query_length,
+        train_batch_size,
+        num_train_steps,
+    )
 
   if do_predict:
-    eval_examples = read_squad_examples(
-        input_file=predict_file,
-        is_training=False,
-        version_2_with_negative=version_2_with_negative)
-
-    eval_writer = FeatureWriter(filename=os.path.join(output_dir,
-                                                      "eval.tf_record"),
-                                is_training=False)
-    eval_features = []
-
-    def append_feature(feature):
-      eval_features.append(feature)
-      eval_writer.process_feature(feature)
-
-    convert_examples_to_features(examples=eval_examples,
-                                 tokenizer=tokenizer,
-                                 max_seq_length=max_seq_length,
-                                 doc_stride=doc_stride,
-                                 max_query_length=max_query_length,
-                                 is_training=False,
-                                 output_fn=append_feature)
-    eval_writer.close()
-
-    tf.logging.info("***** Running predictions *****")
-    tf.logging.info("  Num orig examples = %d", len(eval_examples))
-    tf.logging.info("  Num split examples = %d", len(eval_features))
-    tf.logging.info("  Batch size = %d", predict_batch_size)
-
-    all_results = []
-
-    predict_input_fn = input_fn_builder(input_file=eval_writer.filename,
-                                        seq_length=max_seq_length,
-                                        is_training=False,
-                                        drop_remainder=False)
-
-    # If running eval on the TPU, you will need to specify the number of
-    # steps.
-    all_results = []
-    for result in estimator.predict(predict_input_fn,
-                                    yield_single_examples=True):
-      if len(all_results) % 1000 == 0:
-        tf.logging.info("Processing example: %d" % (len(all_results)))
-      unique_id = int(result["unique_ids"])
-      start_logits = [float(x) for x in result["start_logits"].flat]
-      end_logits = [float(x) for x in result["end_logits"].flat]
-      all_results.append(
-          RawResult(unique_id=unique_id,
-                    start_logits=start_logits,
-                    end_logits=end_logits))
-
-    output_prediction_file = os.path.join(output_dir, "predictions.json")
-    output_nbest_file = os.path.join(output_dir, "nbest_predictions.json")
-    output_null_log_odds_file = os.path.join(output_dir, "null_odds.json")
-
-    write_predictions(eval_examples, eval_features, all_results, n_best_size,
-                      max_answer_length, do_lower_case, output_prediction_file,
-                      output_nbest_file, output_null_log_odds_file,
-                      version_2_with_negative, null_score_diff_threshold,
-                      verbose_logging)
+    run_predict(
+        estimator,
+        predict_file,
+        version_2_with_negative,
+        output_dir,
+        tokenizer,
+        max_seq_length,
+        doc_stride,
+        max_query_length,
+        predict_batch_size,
+        n_best_size,
+        max_answer_length,
+        do_lower_case,
+        null_score_diff_threshold,
+        verbose_logging,
+    )
 
 
 if __name__ == "__main__":
