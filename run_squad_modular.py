@@ -1247,8 +1247,17 @@ def model_predict(
                     verbose_logging)
 
 
-def setup_tpu(use_tpu, tpu_name, tpu_zone, gcp_project, master, output_dir,
-              save_checkpoints_steps, iterations_per_loop, num_tpu_cores):
+def setup_tpu(
+    use_tpu,
+    tpu_name,
+    tpu_zone,
+    gcp_project,
+    master,
+    output_dir,
+    save_checkpoints_steps,
+    iterations_per_loop,
+    num_tpu_cores,
+):
   tpu_cluster_resolver = None
   if use_tpu and tpu_name:
     tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
@@ -1321,9 +1330,17 @@ def main(
   tokenizer = tokenization.FullTokenizer(vocab_file=vocab_file,
                                          do_lower_case=do_lower_case)
 
-  run_config = setup_tpu(use_tpu, tpu_name, tpu_zone, gcp_project, master,
-                         output_dir, save_checkpoints_steps,
-                         iterations_per_loop, num_tpu_cores)
+  run_config = setup_tpu(
+      use_tpu,
+      tpu_name,
+      tpu_zone,
+      gcp_project,
+      master,
+      output_dir,
+      save_checkpoints_steps,
+      iterations_per_loop,
+      num_tpu_cores,
+  )
 
   train_examples = None
   num_train_steps = None
