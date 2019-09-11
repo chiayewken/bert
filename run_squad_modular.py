@@ -1133,20 +1133,24 @@ def validate_flags_or_throw(
         "(%d) + 3" % (max_seq_length, max_query_length))
 
 
-def run_train(estimator, output_dir, train_examples, tokenizer, max_seq_length,
-              doc_stride, max_query_length, train_batch_size, num_train_steps):
+def model_train(estimator, output_dir, train_examples, tokenizer,
+                max_seq_length, doc_stride, max_query_length, train_batch_size,
+                num_train_steps):
   # We write to a temporary file to avoid storing very large constant tensors
   # in memory.
-  train_writer = FeatureWriter(filename=os.path.join(output_dir,
-                                                     "train.tf_record"),
-                               is_training=True)
-  convert_examples_to_features(examples=train_examples,
-                               tokenizer=tokenizer,
-                               max_seq_length=max_seq_length,
-                               doc_stride=doc_stride,
-                               max_query_length=max_query_length,
-                               is_training=True,
-                               output_fn=train_writer.process_feature)
+  train_writer = FeatureWriter(
+      filename=os.path.join(output_dir, "train.tf_record"),
+      is_training=True,
+  )
+  convert_examples_to_features(
+      examples=train_examples,
+      tokenizer=tokenizer,
+      max_seq_length=max_seq_length,
+      doc_stride=doc_stride,
+      max_query_length=max_query_length,
+      is_training=True,
+      output_fn=train_writer.process_feature,
+  )
   train_writer.close()
 
   tf.logging.info("***** Running training *****")
@@ -1156,25 +1160,40 @@ def run_train(estimator, output_dir, train_examples, tokenizer, max_seq_length,
   tf.logging.info("  Num steps = %d", num_train_steps)
   del train_examples
 
-  train_input_fn = input_fn_builder(input_file=train_writer.filename,
-                                    seq_length=max_seq_length,
-                                    is_training=True,
-                                    drop_remainder=True)
+  train_input_fn = input_fn_builder(
+      input_file=train_writer.filename,
+      seq_length=max_seq_length,
+      is_training=True,
+      drop_remainder=True,
+  )
   estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
 
 
-def run_predict(estimator, predict_file, version_2_with_negative, output_dir,
-                tokenizer, max_seq_length, doc_stride, max_query_length,
-                predict_batch_size, n_best_size, max_answer_length,
-                do_lower_case, null_score_diff_threshold, verbose_logging):
+def model_predict(
+    estimator,
+    predict_file,
+    version_2_with_negative,
+    output_dir,
+    tokenizer,
+    max_seq_length,
+    doc_stride,
+    max_query_length,
+    predict_batch_size,
+    n_best_size,
+    max_answer_length,
+    do_lower_case,
+    null_score_diff_threshold,
+    verbose_logging,
+):
   eval_examples = read_squad_examples(
       input_file=predict_file,
       is_training=False,
       version_2_with_negative=version_2_with_negative)
 
-  eval_writer = FeatureWriter(filename=os.path.join(output_dir,
-                                                    "eval.tf_record"),
-                              is_training=False)
+  eval_writer = FeatureWriter(
+      filename=os.path.join(output_dir, "eval.tf_record"),
+      is_training=False,
+  )
   eval_features = []
 
   def append_feature(feature):
@@ -1341,7 +1360,7 @@ def main(
       predict_batch_size=predict_batch_size)
 
   if do_train:
-    run_train(
+    model_train(
         estimator,
         output_dir,
         train_examples,
@@ -1354,7 +1373,7 @@ def main(
     )
 
   if do_predict:
-    run_predict(
+    model_predict(
         estimator,
         predict_file,
         version_2_with_negative,
