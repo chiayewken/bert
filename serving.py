@@ -10,10 +10,9 @@ def get_checkpoint_paths(output_dir):
   return paths
 
 
-def remove_adam_vars(output_dir: str) -> None:
+def remove_adam_vars(output_dir: str, export_dir: str) -> None:
   # https://towardsdatascience.com/3-ways-to-optimize-and-export-bert-model-for-online-serving-8f49d774a501
   checkpoint = sorted(get_checkpoint_paths(output_dir))[-1]
-  export_dir = os.path.join(output_dir, 'export')
 
   sess = tf.Session()
   imported_meta = tf.train.import_meta_graph(".".join([checkpoint, "meta"]))
