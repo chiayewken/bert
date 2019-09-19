@@ -1,5 +1,3 @@
-# For use in google cloud shell
-
 # https://cloud.google.com/ml-engine/docs/tensorflow/getting-started-training-prediction
 echo
 echo "get data"
@@ -50,11 +48,11 @@ gcloud ai-platform models create $MODEL_NAME --regions=$REGION
 
 echo
 echo "binary"
-echo $(gsutil ls $OUTPUT_PATH/export/$MODEL_NAME | tail -n 1)
+echo $(gsutil ls $OUTPUT_PATH/export/census | tail -n 1)
 
 gcloud ai-platform versions create v1 \
     --model $MODEL_NAME \
-    --origin $(gsutil ls $OUTPUT_PATH/export/$MODEL_NAME | tail -n 1) \
+    --origin $(gsutil ls $OUTPUT_PATH/export/census | tail -n 1) \
     --runtime-version 1.10
 
 echo
@@ -66,4 +64,6 @@ echo "doing predict"
 gcloud ai-platform predict \
     --model $MODEL_NAME \
     --version v1 \
-    --json-instances ../test.json
+    --json-instances ../test.json \
+> pred.tsv
+cat pred.tsv
