@@ -44,7 +44,6 @@ gcloud ai-platform jobs submit training $JOB_NAME \
     --train-steps 1000 \
     --eval-steps 100 \
     --verbosity DEBUG
-gsutil ls -r $OUTPUT_PATH
 
 MODEL_NAME=census
 gcloud ai-platform models create $MODEL_NAME --regions=$REGION
