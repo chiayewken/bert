@@ -60,10 +60,21 @@ echo "list models"
 gcloud ai-platform models list
 
 echo
-echo "doing predict"
+echo "doing single predict"
 gcloud ai-platform predict \
     --model $MODEL_NAME \
     --version v1 \
     --json-instances ../test.json \
 > pred.tsv
 cat pred.tsv
+
+echo
+echo "doing batch predict"
+gcloud ai-platform jobs submit prediction $JOB_NAME \
+    --model $MODEL_NAME \
+    --version v1 \
+    --data-format text \
+    --region $REGION \
+    --input-paths $TEST_JSON \
+    --output-path $OUTPUT_PATH/predictions
+gsutil cat $OUTPUT_PATH/predictions/prediction.results-00000-of-00001
