@@ -3,8 +3,8 @@
 # https://cloud.google.com/ml-engine/docs/tensorflow/getting-started-training-prediction
 echo
 echo "get data"
-wget https://github.com/GoogleCloudPlatform/cloudml-samples/archive/master.zip
-unzip master.zip
+wget -q -nc https://github.com/GoogleCloudPlatform/cloudml-samples/archive/master.zip
+unzip -qn master.zip
 cd cloudml-samples-master/census/estimator
 
 mkdir data
