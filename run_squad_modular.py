@@ -32,130 +32,6 @@ import tensorflow as tf
 import fire
 from tqdm import tqdm
 
-# flags = tf.flags
-#
-# FLAGS = flags.FLAGS
-#
-# ## Required parameters
-# flags.DEFINE_string(
-#     "bert_config_file", None,
-#     "The config json file corresponding to the pre-trained BERT model. "
-#     "This specifies the model architecture.")
-#
-# flags.DEFINE_string("vocab_file", None,
-#                     "The vocabulary file that the BERT model was trained on.")
-#
-# flags.DEFINE_string(
-#     "output_dir", None,
-#     "The output directory where the model checkpoints will be written.")
-#
-# ## Other parameters
-# flags.DEFINE_string("train_file", None,
-#                     "SQuAD json for training. E.g., train-v1.1.json")
-#
-# flags.DEFINE_string(
-#     "predict_file", None,
-#     "SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json")
-#
-# flags.DEFINE_string(
-#     "init_checkpoint", None,
-#     "Initial checkpoint (usually from a pre-trained BERT model).")
-#
-# flags.DEFINE_bool(
-#     "do_lower_case", True,
-#     "Whether to lower case the input text. Should be True for uncased "
-#     "models and False for cased models.")
-#
-# flags.DEFINE_integer(
-#     "max_seq_length", 384,
-#     "The maximum total input sequence length after WordPiece tokenization. "
-#     "Sequences longer than this will be truncated, and sequences shorter "
-#     "than this will be padded.")
-#
-# flags.DEFINE_integer(
-#     "doc_stride", 128,
-#     "When splitting up a long document into chunks, how much stride to "
-#     "take between chunks.")
-#
-# flags.DEFINE_integer(
-#     "max_query_length", 64,
-#     "The maximum number of tokens for the question. Questions longer than "
-#     "this will be truncated to this length.")
-#
-# flags.DEFINE_bool("do_train", False, "Whether to run training.")
-#
-# flags.DEFINE_bool("do_predict", False, "Whether to run eval on the dev set.")
-#
-# flags.DEFINE_integer("train_batch_size", 32, "Total batch size for training.")
-#
-# flags.DEFINE_integer("predict_batch_size", 8,
-#                      "Total batch size for predictions.")
-#
-# flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
-#
-# flags.DEFINE_float("num_train_epochs", 3.0,
-#                    "Total number of training epochs to perform.")
-#
-# flags.DEFINE_float(
-#     "warmup_proportion", 0.1,
-#     "Proportion of training to perform linear learning rate warmup for. "
-#     "E.g., 0.1 = 10% of training.")
-#
-# flags.DEFINE_integer("save_checkpoints_steps", 1000,
-#                      "How often to save the model checkpoint.")
-#
-# flags.DEFINE_integer("iterations_per_loop", 1000,
-#                      "How many steps to make in each estimator call.")
-#
-# flags.DEFINE_integer(
-#     "n_best_size", 20,
-#     "The total number of n-best predictions to generate in the "
-#     "nbest_predictions.json output file.")
-#
-# flags.DEFINE_integer(
-#     "max_answer_length", 30,
-#     "The maximum length of an answer that can be generated. This is needed "
-#     "because the start and end predictions are not conditioned on one another.")
-#
-# flags.DEFINE_bool("use_tpu", False, "Whether to use TPU or GPU/CPU.")
-#
-# tf.flags.DEFINE_string(
-#     "tpu_name", None,
-#     "The Cloud TPU to use for training. This should be either the name "
-#     "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
-#     "url.")
-#
-# tf.flags.DEFINE_string(
-#     "tpu_zone", None,
-#     "[Optional] GCE zone where the Cloud TPU is located in. If not "
-#     "specified, we will attempt to automatically detect the GCE project from "
-#     "metadata.")
-#
-# tf.flags.DEFINE_string(
-#     "gcp_project", None,
-#     "[Optional] Project name for the Cloud TPU-enabled project. If not "
-#     "specified, we will attempt to automatically detect the GCE project from "
-#     "metadata.")
-#
-# tf.flags.DEFINE_string("master", None, "[Optional] TensorFlow master URL.")
-#
-# flags.DEFINE_integer(
-#     "num_tpu_cores", 8,
-#     "Only used if `use_tpu` is True. Total number of TPU cores to use.")
-#
-# flags.DEFINE_bool(
-#     "verbose_logging", False,
-#     "If true, all of the warnings related to data processing will be printed. "
-#     "A number of warnings are expected for a normal SQuAD evaluation.")
-#
-# flags.DEFINE_bool(
-#     "version_2_with_negative", False,
-#     "If true, the SQuAD examples contain some that do not have an answer.")
-#
-# flags.DEFINE_float(
-#     "null_score_diff_threshold", 0.0,
-#     "If null_score - best_non_null is greater than the threshold predict null.")
-
 
 class SquadExample(object):
   """A single training/test example for simple sequence classification.
@@ -685,15 +561,19 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
   return model_fn
 
 
-def input_fn_builder(input_file, seq_length, is_training, drop_remainder):
-  """Creates an `input_fn` closure to be passed to TPUEstimator."""
-
-  name_to_features = {
+def get_name_to_features(seq_length):
+  return {
       "unique_ids": tf.FixedLenFeature([], tf.int64),
       "input_ids": tf.FixedLenFeature([seq_length], tf.int64),
       "input_mask": tf.FixedLenFeature([seq_length], tf.int64),
       "segment_ids": tf.FixedLenFeature([seq_length], tf.int64),
   }
+
+
+def input_fn_builder(input_file, seq_length, is_training, drop_remainder):
+  """Creates an `input_fn` closure to be passed to TPUEstimator."""
+
+  name_to_features = get_name_to_features(seq_length)
 
   if is_training:
     name_to_features["start_positions"] = tf.FixedLenFeature([], tf.int64)
@@ -1279,24 +1159,37 @@ def setup_tpu(
   return run_config
 
 
-def run_export_for_serving(estimator, max_seq_length, batch_size, export_dir):
-  # https://medium.com/@joyceye04/deploy-a-servable-bert-qa-model-using-tensorflow-serving-d848f9797d9
-  estimator._export_to_tpu = False  ## !!important to add this
+# def run_export_for_serving(estimator, max_seq_length, batch_size, export_dir):
+#   # https://medium.com/@joyceye04/deploy-a-servable-bert-qa-model-using-tensorflow-serving-d848f9797d9
+#   estimator._export_to_tpu = False  ## !!important to add this
+#
+#   def serving_input_receiver_fn():
+#     feature_spec = {
+#         "unique_ids": tf.FixedLenFeature([], tf.int64),
+#         "input_ids": tf.FixedLenFeature([max_seq_length], tf.int64),
+#         "input_mask": tf.FixedLenFeature([max_seq_length], tf.int64),
+#         "segment_ids": tf.FixedLenFeature([max_seq_length], tf.int64),
+#     }
+#
+#     serialized_tf_example = tf.placeholder(dtype=tf.string,
+#                                            shape=[batch_size],
+#                                            name='input_example_tensor')
+#     receiver_tensors = {'examples': serialized_tf_example}
+#     features = tf.parse_example(serialized_tf_example, feature_spec)
+#     return tf.estimator.export.ServingInputReceiver(features, receiver_tensors)
+#
+#   estimator.export_saved_model(
+#       export_dir_base=export_dir,
+#       serving_input_receiver_fn=serving_input_receiver_fn)
+
+
+def run_export_for_serving(estimator, seq_length, export_dir):
+  # Following cloudml census customestimator example (json serving)
+  estimator._export_to_tpu = False
 
   def serving_input_receiver_fn():
-    feature_spec = {
-        "unique_ids": tf.FixedLenFeature([], tf.int64),
-        "input_ids": tf.FixedLenFeature([max_seq_length], tf.int64),
-        "input_mask": tf.FixedLenFeature([max_seq_length], tf.int64),
-        "segment_ids": tf.FixedLenFeature([max_seq_length], tf.int64),
-    }
-
-    serialized_tf_example = tf.placeholder(dtype=tf.string,
-                                           shape=[batch_size],
-                                           name='input_example_tensor')
-    receiver_tensors = {'examples': serialized_tf_example}
-    features = tf.parse_example(serialized_tf_example, feature_spec)
-    return tf.estimator.export.ServingInputReceiver(features, receiver_tensors)
+    inputs = get_name_to_features(seq_length)
+    return tf.estimator.export.ServingInputReceiver(inputs, inputs)
 
   estimator.export_saved_model(
       export_dir_base=export_dir,
@@ -1406,7 +1299,7 @@ def main(
 
   if do_export:
     _batch_size = predict_batch_size
-    run_export_for_serving(estimator, max_seq_length, _batch_size, export_dir)
+    run_export_for_serving(estimator, max_seq_length, export_dir)
 
   if do_train:
     model_train(
