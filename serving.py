@@ -24,3 +24,7 @@ def remove_adam_vars(output_dir: str) -> None:
       my_vars.append(var)
   saver = tf.train.Saver(my_vars)
   saver.save(sess, os.path.join(export_dir, 'model.ckpt'))
+
+
+if __name__ == "__main__":
+  fire.Fire(remove_adam_vars)
