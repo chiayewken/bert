@@ -1184,11 +1184,14 @@ def setup_tpu(
 
 
 def run_export_for_serving(estimator, seq_length, export_dir):
-  # Following cloudml census customestimator example (json serving)
+  # Following cloudml census custom_estimator example (json serving)
   estimator._export_to_tpu = False
 
   def serving_input_receiver_fn():
-    inputs = get_name_to_features(seq_length)
+    name_to_features = get_name_to_features(seq_length)
+    inputs = {}
+    for name, feat in name_to_features.items():
+      inputs[name] = tf.placeholder(shape=feat.shape, dtype=feat.dtype)
     return tf.estimator.export.ServingInputReceiver(inputs, inputs)
 
   estimator.export_saved_model(
@@ -1210,7 +1213,6 @@ def main(
     max_query_length=64,
     do_train=False,
     do_predict=False,
-    do_export=False,
     train_batch_size=32,
     predict_batch_size=8,
     learning_rate=5e-5,
@@ -1297,8 +1299,7 @@ def main(
       train_batch_size=train_batch_size,
       predict_batch_size=predict_batch_size)
 
-  if do_export:
-    _batch_size = predict_batch_size
+  if export_dir is not None:
     run_export_for_serving(estimator, max_seq_length, export_dir)
 
   if do_train:
@@ -1334,9 +1335,4 @@ def main(
 
 
 if __name__ == "__main__":
-  # flags.mark_flag_as_required("vocab_file")
-  # flags.mark_flag_as_required("bert_config_file")
-  # flags.mark_flag_as_required("output_dir")
-  # tf.app.run()
-
   fire.Fire(main)
