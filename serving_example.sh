@@ -51,11 +51,11 @@ gcloud ai-platform models create $MODEL_NAME --regions=$REGION
 
 echo
 echo "binary"
-echo $(gsutil ls $OUTPUT_PATH/export | tail -n 1)
+echo $(gsutil ls $OUTPUT_PATH/export/$MODEL_NAME | tail -n 1)
 
 gcloud ai-platform versions create v1 \
     --model $MODEL_NAME \
-    --origin $(gsutil ls $OUTPUT_PATH/export | tail -n 1) \
+    --origin $(gsutil ls $OUTPUT_PATH/export/$MODEL_NAME | tail -n 1) \
     --runtime-version 1.10
 
 echo
